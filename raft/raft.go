@@ -329,6 +329,7 @@ func (r *Raft) becomeCandidate() {
 	r.State = StateCandidate
 	r.electionElapsed = 0
 	r.Vote = r.id
+	r.Lead = 0
 	r.votes = make(map[uint64]bool)
 	r.votes[r.id] = true
 	r.haveGot = make(map[uint64]bool)
@@ -645,7 +646,6 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 		XXX_unrecognized:     nil,
 		XXX_sizecache:        0,
 	})
-	//fmt.Println("m.comit", m.Commit, "r.comit", r.RaftLog.committed, "lasrindex:", r.RaftLog.LastIndex())
 	if m.Commit > r.RaftLog.committed {
 		r.RaftLog.committed = min(m.Commit, r.RaftLog.LastIndex())
 	}
@@ -804,7 +804,7 @@ func (r *Raft) handleVoteRequest(m pb.Message) {
 	if m.LogTerm > t || (m.LogTerm == t && m.Index >= r.RaftLog.LastIndex()) {
 		if r.Vote == 0 || r.Vote == m.From {
 			r.Vote = m.From
-			r.becomeFollower(m.Term, m.From)
+			r.becomeFollower(m.Term, 0)
 			r.msgs = append(r.msgs, msg)
 		} else {
 			msg.Reject = true
@@ -818,6 +818,7 @@ func (r *Raft) handleVoteRequest(m pb.Message) {
 
 func (r *Raft) handleHup(m pb.Message) {
 	r.becomeCandidate()
+	r.Lead = 0
 	var i uint64
 	for _, i = range r.peers {
 		if i == r.id {
