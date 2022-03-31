@@ -344,6 +344,7 @@ func (r *Raft) becomeLeader() {
 	r.heartbeatElapsed = 0
 	r.Lead = r.id
 	r.Vote = 0
+	//if len(r.peers) > 1 {
 	r.RaftLog.entries = append(r.RaftLog.entries, pb.Entry{
 		EntryType:            pb.EntryType_EntryNormal,
 		Term:                 r.Term,
@@ -355,6 +356,8 @@ func (r *Raft) becomeLeader() {
 	})
 	r.Prs[r.id].Match++
 	r.Prs[r.id].Next++
+	//}
+
 	for _, v := range r.peers {
 		if v == r.id {
 			continue
@@ -920,4 +923,12 @@ func (r *Raft) handleHeartBeatResponse(m pb.Message) {
 		r.sendAppend(m.From)
 	}
 
+}
+
+func (r *Raft) getCommittedEntries() []pb.Entry {
+	ents := make([]pb.Entry, 0)
+	for i := 0; uint64(i) < r.RaftLog.committed; i++ {
+		ents = append(ents, r.RaftLog.entries[i])
+	}
+	return ents
 }

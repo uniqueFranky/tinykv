@@ -16,6 +16,7 @@ package raft
 
 import (
 	"errors"
+	"reflect"
 
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
 )
@@ -70,12 +71,19 @@ type Ready struct {
 type RawNode struct {
 	Raft *Raft
 	// Your Data Here (2A).
+	curReady Ready
 }
 
 // NewRawNode returns a new RawNode given configuration and a list of raft peers.
 func NewRawNode(config *Config) (*RawNode, error) {
 	// Your Code Here (2A).
-	return nil, nil
+	raft := newRaft(config)
+	rawNode := RawNode{
+		Raft:     raft,
+		curReady: Ready{},
+	}
+	rawNode.curReady = rawNode.Ready()
+	return &rawNode, nil
 }
 
 // Tick advances the internal logical clock by a single tick.
@@ -143,19 +151,40 @@ func (rn *RawNode) Step(m pb.Message) error {
 // Ready returns the current point-in-time state of this RawNode.
 func (rn *RawNode) Ready() Ready {
 	// Your Code Here (2A).
-	return Ready{}
+	softState := SoftState{Lead: rn.Raft.Lead, RaftState: rn.Raft.State}
+	hardState := pb.HardState{
+		Term:                 rn.Raft.Term,
+		Vote:                 rn.Raft.Vote,
+		Commit:               rn.Raft.RaftLog.committed,
+		XXX_NoUnkeyedLiteral: struct{}{},
+		XXX_unrecognized:     nil,
+		XXX_sizecache:        0,
+	}
+	entries := rn.Raft.RaftLog.entries
+	snapshot, _ := rn.Raft.RaftLog.storage.Snapshot()
+	committedEntries := rn.Raft.getCommittedEntries()
+	msgs := rn.Raft.msgs
+	return Ready{
+		SoftState:        &softState,
+		HardState:        hardState,
+		Entries:          entries,
+		Snapshot:         snapshot,
+		CommittedEntries: committedEntries,
+		Messages:         msgs,
+	}
 }
 
 // HasReady called when RawNode user need to check if any Ready pending.
 func (rn *RawNode) HasReady() bool {
 	// Your Code Here (2A).
-	return false
+	return !reflect.DeepEqual(rn.curReady, rn.Ready())
 }
 
 // Advance notifies the RawNode that the application has applied and saved progress in the
 // last Ready results.
 func (rn *RawNode) Advance(rd Ready) {
 	// Your Code Here (2A).
+	rn.curReady = rd
 }
 
 // GetProgress return the Progress of this node and its peers, if this
