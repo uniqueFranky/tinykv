@@ -51,7 +51,6 @@ type RaftLog struct {
 	// the incoming unstable snapshot, if any.
 	// (Used in 2C)
 	pendingSnapshot *pb.Snapshot
-
 	// Your Data Here (2A).
 }
 
@@ -59,16 +58,21 @@ type RaftLog struct {
 // to the state that it just commits and applies the latest snapshot.
 func newLog(storage Storage) *RaftLog {
 	// Your Code Here (2A).
-	ent := make([]pb.Entry, 0, 1)
 	snapshot, _ := storage.Snapshot()
-	ent = append(ent, pb.Entry{Term: snapshot.Metadata.Term, Index: snapshot.Metadata.Index})
+	//ent = append(ent, pb.Entry{Term: snapshot.Metadata.Term, Index: snapshot.Metadata.Index})
+	first, _ := storage.FirstIndex()
 	last, _ := storage.LastIndex()
+	first -= snapshot.Metadata.Index
+	last -= snapshot.Metadata.Index
+	ents, _ := storage.Entries(first, last+1)
+	first += snapshot.Metadata.Index
+	last += snapshot.Metadata.Index
 	r := RaftLog{
 		storage:         storage,
-		committed:       last,
-		applied:         last,
+		committed:       0,
+		applied:         0,
 		stabled:         last,
-		entries:         ent,
+		entries:         ents,
 		pendingSnapshot: nil,
 	}
 	return &r
@@ -85,7 +89,10 @@ func (l *RaftLog) maybeCompact() {
 func (l *RaftLog) unstableEntries() []pb.Entry {
 	// Your Code Here (2A).
 	snapshot, _ := l.storage.Snapshot()
-	return l.entries[l.stabled+1-snapshot.Metadata.Index:]
+	if l.stabled-snapshot.Metadata.Index > l.LastIndex() {
+		return make([]pb.Entry, 0)
+	}
+	return l.entries[l.stabled-snapshot.Metadata.Index:]
 }
 
 // nextEnts returns all the committed but not applied entries
@@ -93,7 +100,7 @@ func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	// Your Code Here (2A).
 	snapshot, _ := l.storage.Snapshot()
 	for i := l.applied + 1; i <= l.committed; i++ {
-		ents = append(ents, l.entries[i-snapshot.Metadata.Index])
+		ents = append(ents, l.entries[i-snapshot.Metadata.Index-1])
 	}
 	return ents
 }
@@ -102,7 +109,7 @@ func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 func (l *RaftLog) LastIndex() uint64 {
 	// Your Code Here (2A).
 	snapshot, _ := l.storage.Snapshot()
-	return uint64(len(l.entries)) - 1 + snapshot.Metadata.Index
+	return uint64(len(l.entries)) + snapshot.Metadata.Index
 }
 
 // Term return the term of the entry in the given index
@@ -111,6 +118,9 @@ func (l *RaftLog) Term(i uint64) (uint64, error) {
 	if i > l.LastIndex() {
 		return 0, errors.New("Index exceeded.")
 	}
+	if i == 0 {
+		return 0, nil
+	}
 	snapshot, _ := l.storage.Snapshot()
-	return l.entries[i+snapshot.Metadata.Index].Term, nil
+	return l.entries[i-snapshot.Metadata.Index-1].Term, nil
 }
