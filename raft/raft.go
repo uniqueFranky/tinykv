@@ -215,9 +215,6 @@ func (r *Raft) sendAppend(to uint64) bool {
 	for i := next; i <= r.RaftLog.LastIndex(); i++ {
 		ents = append(ents, &r.RaftLog.entries[i-snapshot.Metadata.Index-1])
 	}
-	if len(ents) == 0 {
-		return true
-	}
 	msg := pb.Message{
 		MsgType:              pb.MessageType_MsgAppend,
 		To:                   to,
@@ -477,6 +474,7 @@ func (r *Raft) updateLog(ents []*pb.Entry, rp int) {
 // handleAppendEntries handle AppendEntries RPC request
 func (r *Raft) handleAppendEntries(m pb.Message) {
 	// Your Code Here (2A).
+
 	if m.Term < r.Term { //refuse if the message is from a stale leader
 		r.msgs = append(r.msgs, pb.Message{
 			MsgType:              pb.MessageType_MsgAppendResponse,
@@ -496,10 +494,10 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 	r.becomeFollower(m.Term, m.From)
-	ok := false
-	if m.Entries == nil {
+	if len(m.Entries) == 0 {
 		return
 	}
+	ok := false
 	if m.Index == 0 {
 		tmp := make([]pb.Entry, 0, 1)
 		for _, v := range m.Entries {
