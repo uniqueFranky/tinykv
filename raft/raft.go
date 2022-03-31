@@ -494,145 +494,66 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 	r.becomeFollower(m.Term, m.From)
-	if len(m.Entries) == 0 {
-		return
-	}
-	ok := false
-	if m.Index == 0 {
-		tmp := make([]pb.Entry, 0, 1)
-		for _, v := range m.Entries {
-			tmp = append(tmp, *v)
-		}
-		r.RaftLog.entries = tmp
+	if m.Entries != nil && len(m.Entries) == 0 {
 		if m.Commit > r.RaftLog.committed {
 			r.RaftLog.committed = min(m.Commit, r.RaftLog.LastIndex())
 		}
-		t, _ := r.RaftLog.Term(r.RaftLog.LastIndex())
-		r.msgs = append(r.msgs, pb.Message{
-			MsgType:              pb.MessageType_MsgAppendResponse,
-			To:                   m.From,
-			From:                 r.id,
-			Term:                 r.Term,
-			LogTerm:              t,
-			Index:                r.RaftLog.LastIndex(),
-			Entries:              nil,
-			Commit:               0,
-			Snapshot:             nil,
-			Reject:               false,
-			XXX_NoUnkeyedLiteral: struct{}{},
-			XXX_unrecognized:     nil,
-			XXX_sizecache:        0,
-		})
 		return
 	}
-	//to find a pos where (the entry before the first entry in the message) matches with the node's log
-	for i, v := range r.RaftLog.entries {
-		if v.Index == m.Index {
-			ok = true
-			if v.Term != m.LogTerm { //delete it and update
-				tmp := make([]pb.Entry, 0, 1)
-				for j := 0; j < i; j++ {
-					tmp = append(tmp, r.RaftLog.entries[j])
-				}
-				for _, p := range m.Entries {
-					tmp = append(tmp, *p)
-				}
-				r.RaftLog.entries = tmp
-			} else {
-				r.updateLog(m.Entries, i+1)
-			}
-			break
-		}
-	}
-	t, _ := r.RaftLog.Term(r.RaftLog.LastIndex())
-	msg := pb.Message{
-		MsgType:              pb.MessageType_MsgAppendResponse,
-		To:                   m.From,
-		From:                 r.id,
-		Term:                 r.Term,
-		LogTerm:              t,
-		Index:                r.RaftLog.LastIndex(),
-		Entries:              nil,
-		Commit:               0,
-		Snapshot:             nil,
-		Reject:               false,
-		XXX_NoUnkeyedLiteral: struct{}{},
-		XXX_unrecognized:     nil,
-		XXX_sizecache:        0,
-	}
-	if ok == false {
-		msg.Reject = true
-	}
-	r.msgs = append(r.msgs, msg)
-	if m.Commit > r.RaftLog.committed {
-		r.RaftLog.committed = min(m.Commit, r.RaftLog.LastIndex())
-	}
 	//ok := false
-	//var pos uint64
-	//for i, v := range r.RaftLog.entries {
-	//	if v.Term == m.LogTerm && v.Index == m.Index {
-	//		ok = true
-	//		pos = uint64(i) + 1
-	//		break
+	//if m.Index == 0 {
+	//	tmp := make([]pb.Entry, 0, 1)
+	//	for _, v := range m.Entries {
+	//		tmp = append(tmp, *v)
 	//	}
-	//}
-	//if m.Index == 0 { //the first log
-	//	ok = true
-	//	pos = 0
-	//}
-	//if ok == false {
+	//	r.RaftLog.entries = tmp
+	//	if m.Commit > r.RaftLog.committed {
+	//		r.RaftLog.committed = min(m.Commit, r.RaftLog.LastIndex())
+	//	}
+	//	t, _ := r.RaftLog.Term(r.RaftLog.LastIndex())
 	//	r.msgs = append(r.msgs, pb.Message{
 	//		MsgType:              pb.MessageType_MsgAppendResponse,
 	//		To:                   m.From,
 	//		From:                 r.id,
 	//		Term:                 r.Term,
-	//		LogTerm:              m.LogTerm,
-	//		Index:                0,
+	//		LogTerm:              t,
+	//		Index:                r.RaftLog.LastIndex(),
 	//		Entries:              nil,
 	//		Commit:               0,
 	//		Snapshot:             nil,
-	//		Reject:               true,
+	//		Reject:               false,
 	//		XXX_NoUnkeyedLiteral: struct{}{},
 	//		XXX_unrecognized:     nil,
 	//		XXX_sizecache:        0,
 	//	})
 	//	return
 	//}
-	//tmp := make([]pb.Entry, 0, 1)
-	//for i := 0; uint64(i) < pos; i++ {
-	//	tmp = append(tmp, r.RaftLog.entries[i])
-	//}
-	////to check if there is an unmatched entry
-	//snapshot, _ := r.RaftLog.storage.Snapshot()
-	//consist := true
-	//for ii, v := range m.Entries {
-	//	i := uint64(ii)
-	//	if i+pos < uint64(len(r.RaftLog.entries)) {
-	//
-	//		if v.Term != r.RaftLog.entries[i+pos].Term || v.Index != r.RaftLog.entries[i+pos].Index { //unmatched
-	//			for j := i; j < uint64(len(m.Entries)); j++ {
-	//				tmp = append(tmp, *m.Entries[j])
+	////to find a pos where (the entry before the first entry in the message) matches with the node's log
+	//for i, v := range r.RaftLog.entries {
+	//	if v.Index == m.Index {
+	//		ok = true
+	//		if v.Term != m.LogTerm { //delete it and update
+	//			tmp := make([]pb.Entry, 0, 1)
+	//			for j := 0; j < i; j++ {
+	//				tmp = append(tmp, r.RaftLog.entries[j])
 	//			}
-	//			r.RaftLog.stabled = i + pos - 1 + snapshot.Metadata.Index + 1
-	//			consist = false
-	//			break
-	//		} else { //match
-	//			tmp = append(tmp, *m.Entries[i])
+	//			for _, p := range m.Entries {
+	//				tmp = append(tmp, *p)
+	//			}
+	//			r.RaftLog.entries = tmp
+	//		} else {
+	//			r.updateLog(m.Entries, i+1)
 	//		}
-	//	} else {
-	//		tmp = append(tmp, *m.Entries[i])
+	//		break
 	//	}
 	//}
-	//if consist && int(pos)+len(m.Entries) < len(r.RaftLog.entries) {
-	//	tmp = append(tmp, r.RaftLog.entries[int(pos)+len(m.Entries):]...)
-	//}
-	//r.RaftLog.entries = tmp
-	//r.msgs = append(r.msgs, pb.Message{
+	//t, _ := r.RaftLog.Term(r.RaftLog.LastIndex())
+	//msg := pb.Message{
 	//	MsgType:              pb.MessageType_MsgAppendResponse,
 	//	To:                   m.From,
 	//	From:                 r.id,
 	//	Term:                 r.Term,
-	//	LogTerm:              0,
+	//	LogTerm:              t,
 	//	Index:                r.RaftLog.LastIndex(),
 	//	Entries:              nil,
 	//	Commit:               0,
@@ -641,11 +562,93 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 	//	XXX_NoUnkeyedLiteral: struct{}{},
 	//	XXX_unrecognized:     nil,
 	//	XXX_sizecache:        0,
-	//})
-	//fmt.Println("m.comit", m.Commit, "r.comit", r.RaftLog.committed, "lasrindex:", r.RaftLog.LastIndex())
+	//}
+	//if ok == false {
+	//	msg.Reject = true
+	//}
+	//r.msgs = append(r.msgs, msg)
 	//if m.Commit > r.RaftLog.committed {
 	//	r.RaftLog.committed = min(m.Commit, r.RaftLog.LastIndex())
 	//}
+	ok := false
+	var pos uint64
+	for i, v := range r.RaftLog.entries {
+		if v.Term == m.LogTerm && v.Index == m.Index {
+			ok = true
+			pos = uint64(i) + 1
+			break
+		}
+	}
+	if m.Index == 0 { //the first log
+		ok = true
+		pos = 0
+	}
+	if ok == false {
+		r.msgs = append(r.msgs, pb.Message{
+			MsgType:              pb.MessageType_MsgAppendResponse,
+			To:                   m.From,
+			From:                 r.id,
+			Term:                 r.Term,
+			LogTerm:              m.LogTerm,
+			Index:                0,
+			Entries:              nil,
+			Commit:               0,
+			Snapshot:             nil,
+			Reject:               true,
+			XXX_NoUnkeyedLiteral: struct{}{},
+			XXX_unrecognized:     nil,
+			XXX_sizecache:        0,
+		})
+		return
+	}
+	tmp := make([]pb.Entry, 0, 1)
+	for i := 0; uint64(i) < pos; i++ {
+		tmp = append(tmp, r.RaftLog.entries[i])
+	}
+	//to check if there is an unmatched entry
+	snapshot, _ := r.RaftLog.storage.Snapshot()
+	consist := true
+	for ii, v := range m.Entries {
+		i := uint64(ii)
+		if i+pos < uint64(len(r.RaftLog.entries)) {
+
+			if v.Term != r.RaftLog.entries[i+pos].Term || v.Index != r.RaftLog.entries[i+pos].Index { //unmatched
+				for j := i; j < uint64(len(m.Entries)); j++ {
+					tmp = append(tmp, *m.Entries[j])
+				}
+				r.RaftLog.stabled = i + pos - 1 + snapshot.Metadata.Index + 1
+				consist = false
+				break
+			} else { //match
+				tmp = append(tmp, *m.Entries[i])
+			}
+		} else {
+			tmp = append(tmp, *m.Entries[i])
+		}
+	}
+	if consist && int(pos)+len(m.Entries) < len(r.RaftLog.entries) {
+		tmp = append(tmp, r.RaftLog.entries[int(pos)+len(m.Entries):]...)
+	}
+	r.RaftLog.entries = tmp
+	r.msgs = append(r.msgs, pb.Message{
+		MsgType:              pb.MessageType_MsgAppendResponse,
+		To:                   m.From,
+		From:                 r.id,
+		Term:                 r.Term,
+		LogTerm:              0,
+		Index:                r.RaftLog.LastIndex(),
+		Entries:              nil,
+		Commit:               0,
+		Snapshot:             nil,
+		Reject:               false,
+		XXX_NoUnkeyedLiteral: struct{}{},
+		XXX_unrecognized:     nil,
+		XXX_sizecache:        0,
+	})
+	//fmt.Println("m.comit", m.Commit, "r.comit", r.RaftLog.committed, "lasrindex:", r.RaftLog.LastIndex())
+	if m.Commit > r.RaftLog.committed {
+		r.RaftLog.committed = min(m.Commit, r.RaftLog.LastIndex())
+	}
 }
 
 func (r *Raft) handleBeat(m pb.Message) {
