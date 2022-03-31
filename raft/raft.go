@@ -675,6 +675,7 @@ func (r *Raft) handleBeat(m pb.Message) {
 }
 func (r *Raft) handleVoteResponse(m pb.Message) {
 	got := 0
+	get := 0
 	r.haveGot[m.From] = true
 	if m.Reject == false {
 		r.votes[m.From] = true
@@ -690,23 +691,19 @@ func (r *Raft) handleVoteResponse(m pb.Message) {
 		}
 	}
 
-	if got > len(r.peers)/2 {
-		r.becomeLeader()
+	for _, i := range r.peers {
+		if r.haveGot[i] == true {
+			got++
+		}
+		if r.votes[i] == true {
+			get++
+		}
 	}
-
-	//for _, i := range r.peers {
-	//	if r.haveGot[i] == true {
-	//		got++
-	//	}
-	//	if r.votes[i] == true {
-	//		get++
-	//	}
-	//}
-	//if get > len(r.peers)/2 {
-	//	r.becomeLeader()
-	//} else if got > len(r.peers)/2 {
-	//	r.becomeFollower(m.Term, 0)
-	//}
+	if get > len(r.peers)/2 {
+		r.becomeLeader()
+	} else if got == len(r.peers) {
+		r.becomeFollower(m.Term, 0)
+	}
 }
 
 // handleHeartbeat handle Heartbeat RPC request
