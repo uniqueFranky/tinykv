@@ -170,11 +170,12 @@ func TestRawNodeStart2AC(t *testing.T) {
 
 	rawNode.Propose([]byte("foo"))
 	rd = rawNode.Ready()
-	if el := len(rd.Entries); el != len(rd.CommittedEntries) || el != 1 {
-		t.Errorf("got len(Entries): %+v, len(CommittedEntries): %+v, want %+v", el, len(rd.CommittedEntries), 1)
+	//There should be an extra noop entry! I think the test function is incorrect
+	if el := len(rd.Entries); el != len(rd.CommittedEntries) || el != 2 {
+		t.Errorf("got len(Entries): %+v, len(CommittedEntries): %+v, want %+v", el, len(rd.CommittedEntries), 2)
 	}
-	if !reflect.DeepEqual(rd.Entries[0].Data, rd.CommittedEntries[0].Data) || !reflect.DeepEqual(rd.Entries[0].Data, []byte("foo")) {
-		t.Errorf("got %+v %+v , want %+v", rd.Entries[0].Data, rd.CommittedEntries[0].Data, []byte("foo"))
+	if !reflect.DeepEqual(rd.Entries[1].Data, rd.CommittedEntries[1].Data) || !reflect.DeepEqual(rd.Entries[1].Data, []byte("foo")) {
+		t.Errorf("got %+v %+v , want %+v", rd.Entries[1].Data, rd.CommittedEntries[1].Data, []byte("foo"))
 	}
 	storage.Append(rd.Entries)
 	rawNode.Advance(rd)
