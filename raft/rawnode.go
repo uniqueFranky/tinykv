@@ -16,8 +16,7 @@ package raft
 
 import (
 	"errors"
-	"reflect"
-
+	"fmt"
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
 )
 
@@ -71,7 +70,9 @@ type Ready struct {
 type RawNode struct {
 	Raft *Raft
 	// Your Data Here (2A).
-	curReady Ready
+	curSoftState SoftState
+	curHardState pb.HardState
+	curStabled   uint64
 }
 
 // NewRawNode returns a new RawNode given configuration and a list of raft peers.
@@ -79,10 +80,22 @@ func NewRawNode(config *Config) (*RawNode, error) {
 	// Your Code Here (2A).
 	raft := newRaft(config)
 	rawNode := RawNode{
-		Raft:     raft,
-		curReady: Ready{},
+		Raft: raft,
+		curSoftState: SoftState{
+			Lead:      raft.Lead,
+			RaftState: raft.State,
+		},
+		curHardState: pb.HardState{
+			Term:                 raft.Term,
+			Vote:                 raft.Vote,
+			Commit:               raft.RaftLog.committed,
+			XXX_NoUnkeyedLiteral: struct{}{},
+			XXX_unrecognized:     nil,
+			XXX_sizecache:        0,
+		},
+		curStabled: raft.RaftLog.stabled,
 	}
-	rawNode.curReady = rawNode.Ready()
+
 	return &rawNode, nil
 }
 
@@ -151,7 +164,10 @@ func (rn *RawNode) Step(m pb.Message) error {
 // Ready returns the current point-in-time state of this RawNode.
 func (rn *RawNode) Ready() Ready {
 	// Your Code Here (2A).
-	softState := SoftState{Lead: rn.Raft.Lead, RaftState: rn.Raft.State}
+	softState := &SoftState{Lead: rn.Raft.Lead, RaftState: rn.Raft.State}
+	if softState.Lead == rn.curSoftState.Lead && softState.RaftState == rn.curSoftState.RaftState {
+		softState = nil
+	}
 	hardState := pb.HardState{
 		Term:                 rn.Raft.Term,
 		Vote:                 rn.Raft.Vote,
@@ -160,16 +176,27 @@ func (rn *RawNode) Ready() Ready {
 		XXX_unrecognized:     nil,
 		XXX_sizecache:        0,
 	}
-	entries := rn.Raft.RaftLog.entries
+	if isHardStateEqual(hardState, rn.curHardState) {
+		hardState = pb.HardState{}
+	}
+	entries := make([]pb.Entry, 0)
+
+	//TODO: Check Array Index with SnapShot
+
+	for i := rn.curHardState.Commit + 1; i <= rn.Raft.RaftLog.committed; i++ {
+		entries = append(entries, rn.Raft.RaftLog.entries[i-1])
+	}
+	//TODO: Maybe Need to be Modified
 	snapshot, _ := rn.Raft.RaftLog.storage.Snapshot()
-	committedEntries := rn.Raft.getCommittedEntries()
+	//committedEntries := rn.Raft.getCommittedEntries()
 	msgs := rn.Raft.msgs
+	//TODO: Check the meaning of CommittedEntries
 	return Ready{
-		SoftState:        &softState,
+		SoftState:        softState,
 		HardState:        hardState,
 		Entries:          entries,
 		Snapshot:         snapshot,
-		CommittedEntries: committedEntries,
+		CommittedEntries: entries,
 		Messages:         msgs,
 	}
 }
@@ -177,14 +204,28 @@ func (rn *RawNode) Ready() Ready {
 // HasReady called when RawNode user need to check if any Ready pending.
 func (rn *RawNode) HasReady() bool {
 	// Your Code Here (2A).
-	return !reflect.DeepEqual(rn.curReady, rn.Ready())
+	rd := rn.Ready()
+	if rd.SoftState != nil || !IsEmptyHardState(rd.HardState) || len(rd.Entries) != 0 {
+		return true
+	}
+	return false
 }
 
 // Advance notifies the RawNode that the application has applied and saved progress in the
 // last Ready results.
 func (rn *RawNode) Advance(rd Ready) {
 	// Your Code Here (2A).
-	rn.curReady = rd
+	ents := rd.Entries
+	if ents != nil && len(ents) > 0 {
+		rn.curHardState.Commit = ents[len(ents)-1].Index
+		fmt.Println("!@#", ents[len(ents)-1].Index)
+	}
+	if rd.SoftState != nil {
+		rn.curSoftState = *rd.SoftState
+	}
+	if !IsEmptyHardState(rd.HardState) {
+		rn.curHardState = rd.HardState
+	}
 }
 
 // GetProgress return the Progress of this node and its peers, if this

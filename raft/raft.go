@@ -176,13 +176,14 @@ func newRaft(c *Config) *Raft {
 		prs[i] = &Progress{0, 1}
 	}
 	hardstate, _, _ := c.Storage.InitialState()
-
+	log := newLog(c.Storage)
+	log.applied = c.Applied
 	rand.Seed(time.Now().UnixNano())
 	r := Raft{
 		id:               c.ID,
 		Term:             hardstate.Term,
 		Vote:             hardstate.Vote,
-		RaftLog:          newLog(c.Storage),
+		RaftLog:          log,
 		Prs:              prs,
 		State:            StateFollower,
 		votes:            make(map[uint64]bool),
@@ -195,7 +196,7 @@ func newRaft(c *Config) *Raft {
 		leadTransferee:   0,
 		PendingConfIndex: 0,
 		peers:            c.peers,
-		committed:        0,
+		committed:        hardstate.Commit,
 		randEleTimeout:   c.ElectionTick + rand.Intn(c.ElectionTick),
 		haveGot:          make(map[uint64]bool),
 	}
@@ -354,6 +355,9 @@ func (r *Raft) becomeLeader() {
 		XXX_unrecognized:     nil,
 		XXX_sizecache:        0,
 	})
+	if len(r.peers) == 1 {
+		r.RaftLog.committed = r.RaftLog.LastIndex()
+	}
 	r.Prs[r.id].Match++
 	r.Prs[r.id].Next++
 	//}
